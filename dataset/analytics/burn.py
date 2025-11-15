@@ -11,7 +11,7 @@ def burn_by_function(dfs: Dict[str, pd.DataFrame]) -> dict:
         dfs: Dictionary of table name -> DataFrame
     
     Returns:
-        JSON-serializable dict with burn by function
+        JSON-serializable dict with burn by function, summary statistics, and human-readable summary
     """
     # Load required tables
     gl_df = dfs.get("fact_gl_actuals_monthly", pd.DataFrame()).copy()
@@ -19,7 +19,16 @@ def burn_by_function(dfs: Dict[str, pd.DataFrame]) -> dict:
     dim_account_df = dfs.get("dim_account", pd.DataFrame())
     
     if gl_df.empty:
-        return {"functions": []}
+        return {
+            "functions": [],
+            "summary": {
+                "total_functions": 0,
+                "total_burn_all_functions": 0.0,
+                "average_monthly_burn_all_functions": 0.0,
+                "currency": "USD"
+            },
+            "summary_text": "No burn data available."
+        }
     
     # Filter for Opex accounts
     if not dim_account_df.empty:
@@ -66,9 +75,43 @@ def burn_by_function(dfs: Dict[str, pd.DataFrame]) -> dict:
             elif isinstance(value, (np.integer, int)):
                 func[key] = int(value)
             elif isinstance(value, (np.floating, float)):
-                func[key] = float(value)
+                func[key] = round(float(value), 2)
             else:
                 func[key] = str(value)
     
-    return {"functions": functions}
+    # Calculate summary statistics
+    total_burn_all = sum(f.get('total_burn', 0) for f in functions)
+    avg_monthly_burn_all = sum(f.get('avg_monthly_burn', 0) for f in functions) / len(functions) if functions else 0.0
+    
+    # Generate human-readable summary
+    summary_parts = [f"Burn analysis across {len(functions)} functions."]
+    summary_parts.append(f"Total burn across all functions: ${total_burn_all:,.2f}.")
+    summary_parts.append(f"Average monthly burn per function: ${avg_monthly_burn_all:,.2f}.")
+    
+    if functions:
+        top_function = functions[0]
+        summary_parts.append(
+            f"Highest burn function: {top_function.get('function', 'N/A')} "
+            f"with ${top_function.get('avg_monthly_burn', 0):,.2f}/month average "
+            f"(${top_function.get('total_burn', 0):,.2f} total)."
+        )
+        if len(functions) > 1:
+            bottom_function = functions[-1]
+            summary_parts.append(
+                f"Lowest burn function: {bottom_function.get('function', 'N/A')} "
+                f"with ${bottom_function.get('avg_monthly_burn', 0):,.2f}/month average."
+            )
+    
+    summary_text = " ".join(summary_parts)
+    
+    return {
+        "functions": functions,
+        "summary": {
+            "total_functions": len(functions),
+            "total_burn_all_functions": round(total_burn_all, 2),
+            "average_monthly_burn_all_functions": round(avg_monthly_burn_all, 2),
+            "currency": "USD"
+        },
+        "summary_text": summary_text
+    }
 

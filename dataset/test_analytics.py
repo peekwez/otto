@@ -177,8 +177,15 @@ def test_runway(dfs: Dict[str, pd.DataFrame]) -> bool:
         print_success("Runway calculation completed")
         print_info(f"Current cash: ${result['current_cash']:,.2f}")
         print_info(f"Monthly burn: ${result['monthly_burn']:,.2f}")
-        print_info(f"Runway: {result['runway_months']:.2f} months")
+        if result['runway_months'] == float('inf'):
+            print_info(f"Runway: Infinite months")
+        else:
+            print_info(f"Runway: {result['runway_months']:.2f} months")
         print_info(f"Projection months: {len(result['projection'])}")
+        
+        # Display summary if available
+        if 'summary_text' in result:
+            print_info(f"Summary: {result['summary_text']}")
         
         # Test with delay
         if result['projection']:
@@ -227,6 +234,16 @@ def test_variance(dfs: Dict[str, pd.DataFrame]) -> bool:
         print_success("Variance report completed")
         print_info(f"Variance rows: {len(result['rows'])}")
         
+        # Display summary if available
+        if 'summary' in result:
+            summary = result['summary']
+            print_info(f"Total actual: ${summary.get('total_actual', 0):,.2f}")
+            print_info(f"Total budget: ${summary.get('total_budget', 0):,.2f}")
+            print_info(f"Total variance: ${summary.get('total_variance', 0):,.2f}")
+        
+        if 'summary_text' in result:
+            print_info(f"Summary: {result['summary_text']}")
+        
         if result['rows']:
             # Show sample row
             sample = result['rows'][0]
@@ -255,6 +272,15 @@ def test_burn(dfs: Dict[str, pd.DataFrame]) -> bool:
         
         print_success("Burn by function completed")
         print_info(f"Functions analyzed: {len(result['functions'])}")
+        
+        # Display summary if available
+        if 'summary' in result:
+            summary = result['summary']
+            print_info(f"Total burn: ${summary.get('total_burn_all_functions', 0):,.2f}")
+            print_info(f"Avg monthly burn: ${summary.get('average_monthly_burn_all_functions', 0):,.2f}")
+        
+        if 'summary_text' in result:
+            print_info(f"Summary: {result['summary_text']}")
         
         if result['functions']:
             # Show summary
@@ -301,6 +327,20 @@ def test_cloud_marketing(dfs: Dict[str, pd.DataFrame]) -> bool:
         print_info(f"Cloud cost entries: {len(result['cloud_costs'])}")
         print_info(f"Marketing spend entries: {len(result['marketing_spend'])}")
         
+        # Display summary if available
+        if 'summary' in result:
+            summary = result['summary']
+            print_info(f"Total combined spend: ${summary.get('total_spend', 0):,.2f}")
+            if summary.get('top_cloud_provider'):
+                print_info(f"Top cloud provider: {summary.get('top_cloud_provider')} "
+                          f"(${summary.get('top_cloud_provider_amount', 0):,.2f})")
+            if summary.get('top_marketing_channel'):
+                print_info(f"Top marketing channel: {summary.get('top_marketing_channel')} "
+                          f"(${summary.get('top_marketing_channel_amount', 0):,.2f})")
+        
+        if 'summary_text' in result:
+            print_info(f"Summary: {result['summary_text']}")
+        
         return True
     except Exception as e:
         print_error(f"Cloud & marketing breakdown failed: {str(e)}")
@@ -339,6 +379,16 @@ def test_slides(dfs: Dict[str, pd.DataFrame]) -> bool:
         print_info(f"KPIs: {len(result['kpis'])}")
         print_info(f"Narrative length: {len(result.get('narrative', ''))} characters")
         print_info(f"Key metrics: {len(result['key_metrics'])}")
+        
+        # Display summary if available
+        if 'summary' in result:
+            summary = result['summary']
+            print_info(f"On target: {summary.get('on_target_count', 0)}, "
+                      f"Above target: {summary.get('above_target_count', 0)}, "
+                      f"Below target: {summary.get('below_target_count', 0)}")
+        
+        if 'summary_text' in result:
+            print_info(f"Summary: {result['summary_text']}")
         
         return True
     except Exception as e:
