@@ -22,7 +22,12 @@ def calculate_runway(dfs: Dict[str, pd.DataFrame], delay_capex_days: int = 0) ->
             "current_cash": 0.0,
             "monthly_burn": 0.0,
             "runway_months": 0.0,
-            "projection": []
+            "projection": [],
+            "summary": {
+                "currency": "USD",
+                "capex_delay_days": delay_capex_days
+            },
+            "summary_text": "No cash data available. Cannot calculate runway."
         }
     
     # Convert date column if it's a string
@@ -101,10 +106,16 @@ def calculate_runway(dfs: Dict[str, pd.DataFrame], delay_capex_days: int = 0) ->
     
     if monthly_burn == 0:
         return {
-            "current_cash": current_cash,
+            "current_cash": round(current_cash, 2),
             "monthly_burn": 0.0,
             "runway_months": float('inf') if current_cash > 0 else 0.0,
-            "projection": []
+            "projection": [],
+            "summary": {
+                "currency": "USD",
+                "capex_delay_days": delay_capex_days,
+                "latest_date": latest_date.strftime('%Y-%m-%d')
+            },
+            "summary_text": f"Current cash: ${current_cash:,.2f}. No monthly burn detected. Runway cannot be calculated."
         }
     
     # Handle CapEx schedule with delay
@@ -125,6 +136,7 @@ def calculate_runway(dfs: Dict[str, pd.DataFrame], delay_capex_days: int = 0) ->
     
     # Get CapEx by month
     capex_by_month = {}
+    total_capex = 0.0
     if not capex_df.empty:
         for _, row in capex_df.iterrows():
             month = row['planned_month']
@@ -132,6 +144,7 @@ def calculate_runway(dfs: Dict[str, pd.DataFrame], delay_capex_days: int = 0) ->
             if month not in capex_by_month:
                 capex_by_month[month] = 0.0
             capex_by_month[month] += amount
+            total_capex += amount
     
     # Project forward until cash runs out (max 60 months)
     for i in range(60):
@@ -155,10 +168,46 @@ def calculate_runway(dfs: Dict[str, pd.DataFrame], delay_capex_days: int = 0) ->
         
         current_month = current_month + relativedelta(months=1)
     
+    # Generate human-readable summary
+    summary_parts = []
+    summary_parts.append(f"Current cash balance: ${current_cash:,.2f} (as of {latest_date.strftime('%Y-%m-%d')}).")
+    summary_parts.append(f"Monthly burn rate: ${monthly_burn:,.2f} (based on trailing 3-month average).")
+    
+    if delay_capex_days > 0:
+        summary_parts.append(f"CapEx payments delayed by {delay_capex_days} days.")
+    
+    if total_capex > 0:
+        summary_parts.append(f"Total planned CapEx: ${total_capex:,.2f}.")
+    
+    if runway_months == float('inf'):
+        summary_parts.append("Runway: Infinite (cash exceeds projected outflows).")
+    elif runway_months >= 12:
+        years = runway_months / 12
+        summary_parts.append(f"Cash runway: {runway_months:.1f} months ({years:.1f} years).")
+    else:
+        summary_parts.append(f"Cash runway: {runway_months:.1f} months.")
+    
+    if projection:
+        last_month = projection[-1]
+        summary_parts.append(
+            f"Projected cash at end of runway: ${last_month.get('cash', 0):,.2f} "
+            f"(month: {last_month.get('month', 'N/A')})."
+        )
+    
+    summary_text = " ".join(summary_parts)
+    
     return {
         "current_cash": round(current_cash, 2),
         "monthly_burn": round(monthly_burn, 2),
-        "runway_months": round(runway_months, 2),
-        "projection": projection
+        "runway_months": round(runway_months, 2) if runway_months != float('inf') else float('inf'),
+        "projection": projection,
+        "summary": {
+            "currency": "USD",
+            "capex_delay_days": delay_capex_days,
+            "latest_date": latest_date.strftime('%Y-%m-%d'),
+            "total_planned_capex": round(total_capex, 2),
+            "projection_months": len(projection)
+        },
+        "summary_text": summary_text
     }
 
