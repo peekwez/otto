@@ -1,4 +1,5 @@
 import contextlib
+from collections.abc import AsyncGenerator
 
 from fastapi import FastAPI
 
@@ -9,7 +10,7 @@ _logger = get_logger(__name__)
 
 
 @contextlib.asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup code here
     async with contextlib.AsyncExitStack() as stack:
         initialize_datasets()
@@ -26,7 +27,7 @@ app = FastAPI(
 
 
 @app.get("/")
-async def read_root():
+async def read_root() -> dict[str, str]:
     return {"Hello": "World"}
 
 
@@ -40,12 +41,13 @@ def run_app(host: str, port: int) -> None:
 
     uvicorn.run(
         "otto.app.api:app",
-        workers=4,
+        # workers=4,
         host=host,
         port=port,
         log_config=None,
         log_level="info",
-        loop="auto",
-        http="auto",
-        server_header=False,
+        reload=True,
+        # loop="auto",
+        # http="auto",
+        # server_header=False,
     )
