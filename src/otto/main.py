@@ -1,37 +1,37 @@
-import contextlib
-from mcp.server.fastmcp import FastMCP, Context
-from fastapi import FastAPI
+# import contextlib
+# from mcp.server.fastmcp import FastMCP, Context
+# from fastapi import FastAPI
 
-mcp = FastMCP(
-    name="demo",
-    instructions="A simple demo plugin for FastMCP.",
-)
-
-
-@contextlib.asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup code here
-    async with contextlib.AsyncExitStack() as stack:
-        await stack.enter_async_context(mcp.session_manager.run())
-
-        yield
-    # Shutdown code here
+# mcp = FastMCP(
+#     name="demo",
+#     instructions="A simple demo plugin for FastMCP.",
+# )
 
 
-api = FastAPI(
-    name="demo_api",
-    lifespan=lifespan,
-)
+# @contextlib.asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     # Startup code here
+#     async with contextlib.AsyncExitStack() as stack:
+#         await stack.enter_async_context(mcp.session_manager.run())
+
+#         yield
+#     # Shutdown code here
 
 
-@mcp.tool(name="TestTool")
-def test_fool(context: Context) -> str:
-    return '{"name": "Fool!"}'
+# api = FastAPI(
+#     name="demo_api",
+#     lifespan=lifespan,
+# )
 
 
-api.mount("/demo", mcp.streamable_http_app())
+# @mcp.tool(name="TestTool")
+# def test_fool(context: Context) -> str:
+#     return '{"name": "Fool!"}'
 
-# if __name__ == "__main__":
+
+# api.mount("/demo", mcp.streamable_http_app())
+
+# # if __name__ == "__main__":
 
 # def main():
 #     print("Hello from demo!")

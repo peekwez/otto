@@ -1,5 +1,5 @@
 TASK_ID ?=
-ENV_FILE := $$(pwd)/.env.agent.local
+ENV_FILE := $$(pwd)/.env
 
 .PHONY: sync run format lint mypy tests coverage run
 
@@ -47,3 +47,7 @@ down:
 
 up: down
 	docker compose --env-file .env up -d
+
+inspect:
+	npx @modelcontextprotocol/inspector \
+		node build/index.js
