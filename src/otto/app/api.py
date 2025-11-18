@@ -2,13 +2,17 @@ import contextlib
 
 from fastapi import FastAPI
 
-from otto.app.mcp import mcp
+from otto.app.mcp import initialize_datasets, mcp
+from otto.core.logging import get_logger, patch_server_logging
+
+_logger = get_logger(__name__)
 
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup code here
     async with contextlib.AsyncExitStack() as stack:
+        initialize_datasets()
         await stack.enter_async_context(mcp.session_manager.run())
 
         yield
@@ -16,7 +20,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    name="demo_api",
+    name="demo_mcp",
     lifespan=lifespan,
 )
 
@@ -26,10 +30,22 @@ async def read_root():
     return {"Hello": "World"}
 
 
-app.mount("/demo", mcp.streamable_http_app())
+app.mount("/cfo", mcp.streamable_http_app())
 
 
 def run_app(host: str, port: int) -> None:
     import uvicorn
 
-    uvicorn.run("otto.app.api:app", host=host, port=port, reload=True)
+    patch_server_logging(_logger)
+
+    uvicorn.run(
+        "otto.app.api:app",
+        workers=4,
+        host=host,
+        port=port,
+        log_config=None,
+        log_level="info",
+        loop="auto",
+        http="auto",
+        server_header=False,
+    )

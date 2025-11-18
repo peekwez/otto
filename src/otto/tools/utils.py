@@ -1,12 +1,7 @@
-import os
 from functools import lru_cache
 
 import pandas as pd
 from sqlalchemy import create_engine, inspect
-
-# Aiven PostgreSQL connection string from environment
-AIVEN_PG_URL = os.getenv("AIVEN_PG_URL", "")
-SCHEMA = os.getenv("SCHEMA", "demo")
 
 from otto.core.settings import get_settings
 
@@ -26,12 +21,12 @@ def load_all_tables() -> dict[str, pd.DataFrame]:
     """
     engine = connect_engine()
     inspector = inspect(engine)
+    settings = get_settings()
 
-    table_names = inspector.get_table_names(schema=SCHEMA)
-
-    dfs = {}
+    table_names = inspector.get_table_names(schema=settings.postgres.schema_name)
+    dfs: dict[str, pd.DataFrame] = {}
     for table in table_names:
-        query = f'SELECT * FROM "{SCHEMA}"."{table}"'
-        dfs[table] = pd.read_sql(query, con=engine)
+        query = f'SELECT * FROM "{settings.postgres.schema_name}"."{table}"'
+        dfs[table] = pd.read_sql(query, con=engine)  # type: ignore --- IGNORE ---
 
     return dfs
