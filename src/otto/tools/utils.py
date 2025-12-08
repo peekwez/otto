@@ -2,12 +2,13 @@ from functools import lru_cache
 
 import pandas as pd
 from sqlalchemy import create_engine, inspect
+from sqlalchemy.engine import Engine
 
 from otto.core.settings import get_settings
 
 
-@lru_cache()
-def connect_engine():
+@lru_cache
+def connect_engine() -> Engine:
     settings = get_settings()
     return create_engine(settings.postgres.url)
 
@@ -27,6 +28,6 @@ def load_all_tables() -> dict[str, pd.DataFrame]:
     dfs: dict[str, pd.DataFrame] = {}
     for table in table_names:
         query = f'SELECT * FROM "{settings.postgres.schema_name}"."{table}"'
-        dfs[table] = pd.read_sql(query, con=engine)  # type: ignore --- IGNORE ---
+        dfs[table] = pd.read_sql(query, con=engine)  # type: ignore
 
     return dfs

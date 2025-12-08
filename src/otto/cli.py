@@ -21,10 +21,7 @@ def app(host: str, port: int, env_file: str) -> None:
     from otto.app.api import run_app
     from otto.core.settings import get_settings
 
-    settings = get_settings(env_file)
-    click.echo(
-        f"Starting Otto API server at http://{host}:{port} with Postgres URL: {settings.postgres.url} and Schema: {settings.postgres.schema_name}"
-    )
+    get_settings(env_file)
     run_app(host, port)
 
 
