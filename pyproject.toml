@@ -6,8 +6,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "otto"
 version = "0.1.0"
-description = "Add your description here"
+description = "An Smart Connector (i.e., MCP) for CFO financial analysis tasks."
 readme = "README.md"
+authors = [
+    { name = "Kwesi Apponsah", email = "kwesiparry@gmail.com" },
+    { name = "Jad Dimachkieh", email = "jad.dimachkieh@gmail.com" }
+]
 requires-python = ">=3.12"
 dependencies = [
     "arrow>=1.4.0",
