@@ -12,17 +12,33 @@ def cli() -> None:
 @click.option(
     "--env-file",
     "-e",
-    type=click.Path(exists=True),
-    default=".env",
+    type=click.Path(exists=False),
+    default=None,
     help="Path to the .env file",
 )
-def app(host: str, port: int, env_file: str) -> None:
+def app(host: str, port: int, env_file: str | None) -> None:
     """Run the Otto API server."""
-    from otto.app.api import run_app
+
     from otto.core.settings import get_settings
 
     get_settings(env_file)
+
+    from otto.app.mcp import run_app
+
     run_app(host, port)
+
+
+@cli.command("test-client")
+def test_client() -> None:
+    """Test the MCP OAuth client flow."""
+    # from otto.core.settings import get_settings
+
+    # get_settings(env_file)
+    import asyncio
+
+    from otto.app.client import connect as connect_client
+
+    asyncio.run(connect_client())
 
 
 if __name__ == "__main__":

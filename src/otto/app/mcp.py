@@ -1,18 +1,18 @@
+import contextlib
+from collections.abc import AsyncGenerator
 from typing import Any
 
-# import httpx
 import pandas as pd
-
-# from mcp.server.auth.middleware.auth_context import get_access_token
-# from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
-# from mcp.server.fastmcp import Context, FastMCP
+from cryptography.fernet import Fernet
 from fastmcp import Context, FastMCP
+from fastmcp.server.auth.providers.google import GoogleProvider
+from fastmcp.server.dependencies import AccessToken, get_access_token
+from key_value.aio.stores.redis import RedisStore
+from key_value.aio.wrappers.encryption import FernetEncryptionWrapper
 from starlette.exceptions import HTTPException
-from starlette.requests import Request
-from starlette.responses import JSONResponse, RedirectResponse, Response
 
-from otto.app.google_auth import GoogleOAuthProvider
 from otto.core.logging import get_logger
+from otto.core.settings import get_settings
 from otto.tools.analytics.burn import burn_by_function
 from otto.tools.analytics.runway import calculate_runway
 from otto.tools.analytics.variance import variance_report
@@ -28,88 +28,82 @@ def load_datasets() -> None:
     logger.info("Loaded all tables for MCP.")
 
 
-def create_server() -> FastMCP:
-    logger = get_logger(__name__)
-    # settings = get_settings()
-    oauth_provider = GoogleOAuthProvider()
+@contextlib.asynccontextmanager
+async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
+    async with contextlib.AsyncExitStack() as _:
+        load_datasets()
+        yield
 
-    # auth_settings = AuthSettings(
-    #     issuer_url=settings.server_url,
-    #     client_registration_options=ClientRegistrationOptions(
-    #         enabled=True,
-    #         valid_scopes=settings.google_oauth.scope.split(),
-    #         default_scopes=settings.google_oauth.scope.split(),
-    #     ),
-    #     resource_server_url=settings.server_url,
-    #     required_scopes=["openid"],
-    # )
+
+def create_server() -> FastMCP:
+    settings = get_settings()
+    logger = get_logger(__name__)
+
+    auth_provider = None
+    if settings.google_oauth.enable_auth:
+        logger.info("Authentication is ENABLED - OAuth required for MCP endpoints")
+        scopes = settings.google_oauth.scopes.split(",")
+        kwargs: dict[str, Any] = {}
+        if settings.stage == "prod":
+            if not settings.redis.host:
+                raise ValueError(
+                    "Redis host must be set in production for token storage."
+                )
+            client_storage = FernetEncryptionWrapper(
+                key_value=RedisStore(
+                    host=settings.redis.host.host,  # type: ignore
+                    port=settings.redis.port,
+                ),
+                fernet=Fernet(settings.keys.storage_encryption_key.get_secret_value()),
+            )
+            kwargs = {
+                "jwt_signing_key": settings.keys.jwt_signing_key.get_secret_value(),
+                "client_storage": client_storage,
+            }
+        auth_provider = GoogleProvider(
+            client_id=settings.google_oauth.client_id,
+            client_secret=settings.google_oauth.client_secret.get_secret_value(),
+            base_url=settings.server_url,
+            issuer_url=settings.server_url,
+            required_scopes=scopes,
+            redirect_path=settings.google_oauth.callback_path,
+            **kwargs,
+        )
+
+        # Production token management
+
+    else:
+        logger.info(
+            "Authentication is DISABLED - MCP endpoints accessible without OAuth"
+        )
 
     app = FastMCP(
-        name="cfo_mcp",
+        name="CFO Financial Planning MCP",
         instructions="A financial planning and analysis tools for CFOs.",
+        auth=auth_provider,
+        lifespan=lifespan,
+        website_url=settings.server_url.encoded_string(),
     )
 
-    @app.custom_route("/callback", methods=["GET"])
-    async def callback_handler(request: Request) -> Response:  # type: ignore
-        """Handle Google OAuth callback."""
-        code = request.query_params.get("code")
-        state = request.query_params.get("state")
+    # Add a protected tool to test authentication
+    @app.tool(
+        name="GetUserInfo", description="Get information about the authenticated user"
+    )
+    async def get_user_info() -> dict[str, Any]:  # type: ignore
+        """Returns information about the authenticated Google user."""
 
-        if not code or not state:
-            raise HTTPException(400, "Missing code or state parameter")
+        token: AccessToken | None = get_access_token()
+        if token is None:
+            raise HTTPException(401, "Unauthorized")
 
-        try:
-            redirect_uri = await oauth_provider.handle_callback(code, state)
-            return RedirectResponse(status_code=302, url=redirect_uri)
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error("Unexpected error", exc_info=e)
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "error": "server_error",
-                    "error_description": "Unexpected error",
-                },
-            )
-
-    # def get_token() -> str:
-    #     """Get the ADP token for the authenticated user."""
-    #     access_token = get_access_token()
-    #     if not access_token:
-    #         raise ValueError("Not authenticated")
-
-    #     # Get ADP token from mapping
-    #     adp_token = oauth_provider.token_mapping.get(access_token.token)
-
-    #     if not adp_token:
-    #         raise ValueError("No ADP token found for user")
-
-    #     return adp_token
-
-    # @app.tool(
-    #     name="GetGoogleProfile",
-    #     description="Get the authenticated user's Google profile information",
-    # )
-    # async def get_google_profile() -> dict[str, Any]:  # type: ignore
-    #     """Get the authenticated user's profile information.
-
-    #     This is the only tool in our example.
-    #     """
-    #     google_token = get_token()
-
-    #     # make a request to Google API to get user profile using httpx
-    #     user_info_url = "https://www.googleapis.com/oauth2/v2/userinfo"
-    #     async with httpx.AsyncClient() as client:
-    #         response = await client.get(
-    #             user_info_url, headers={"Authorization": f"Bearer {google_token}"}
-    #         )
-    #         if response.status_code != 200:
-    #             raise HTTPException(
-    #                 status_code=response.status_code,
-    #                 detail="Failed to fetch user profile",
-    #             )
-    #         return response.json()
+        # The GoogleProvider stores user data in token claims
+        return {
+            "google_id": token.claims.get("sub"),
+            "email": token.claims.get("email"),
+            "name": token.claims.get("name"),
+            "picture": token.claims.get("picture"),
+            "locale": token.claims.get("locale"),
+        }
 
     @app.tool(
         name="Datasets",
@@ -181,5 +175,30 @@ def create_server() -> FastMCP:
     return app
 
 
-mcp: FastMCP = create_server()
-mcp_app = mcp.http_app(path="/mcp", transport="streamable-http")
+def run_app(host: str, port: int) -> None:
+    from otto.app.tunnel import start_ngrok, stop_ngrok
+    from otto.core.logging import patch_server_logging
+
+    _logger = get_logger(__name__)
+    settings = get_settings()
+
+    patch_server_logging(_logger)
+
+    if settings.ngrok.enable_tunnel:
+        url = start_ngrok(f"{port}")
+        _logger.info(f"ngrok tunnel started at {url}")
+
+    try:
+        mcp: FastMCP = create_server()
+        mcp.run(
+            transport="streamable-http",
+            host=host,
+            port=port,
+            uvicorn_config={"log_level": "info", "log_config": None},
+        )
+    except Exception as e:
+        _logger.error(f"Error running MCP server: {e}")
+    finally:
+        _logger.info("Shutting down ngrok tunnel...")
+        if settings.ngrok.enable_tunnel:
+            stop_ngrok()

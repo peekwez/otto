@@ -1,0 +1,134 @@
+name: Reusable CI Checks
+
+on:
+  workflow_call:
+    inputs:
+      python-versions:
+        description: "List of Python versions to test against"
+        type: string
+        default: '["3.12", "3.13"]'
+        required: false
+      skip-tests:
+        description: "Skip running tests (useful for repos without tests)"
+        type: boolean
+        default: false
+        required: false
+      test-coverage-threshold:
+        description: "Minimum test coverage threshold percentage"
+        type: string
+        default: "95"
+        required: false
+      package-manager:
+        description: "Python package manager to use (uv or pip)"
+        type: string
+        default: "uv"
+        required: false
+    secrets:
+      GH_ACTOR:
+        required: true
+        description: "GitHub actor name"
+      GH_PAT_TOKEN:
+        required: true
+        description: "GitHub actor PAT token"
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON(inputs.python-versions) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Install package manager (uv or pip)
+      - name: Install uv
+        if: ${{ inputs.package-manager == 'uv' }}
+        run: pip install uv
+
+      # Setup cache
+      - uses: actions/cache@v4
+        if: ${{ inputs.package-manager == 'uv' }}
+        with:
+          path: ~/.cache/uv # default wheel cache on Linux/macOS
+          key: ${{ runner.os }}-${{ inputs.package-manager }}-${{ matrix.python-version }}-${{ hashFiles('**/uv.lock', '**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ inputs.package-manager }}-${{ matrix.python-version }}-
+
+      # Setup for private repos (optional)
+      - name: Setup .netrc file for private repos
+        run: |
+          echo "machine github.com" > ~/.netrc
+          echo "login ${{ secrets.GH_ACTOR }}" >> ~/.netrc
+          echo "password ${{ secrets.GH_PAT_TOKEN }}" >> ~/.netrc
+          chmod 600 ~/.netrc
+
+      # Install dependencies based on package manager
+      - name: Sync dependencies with uv
+        if: ${{ inputs.package-manager == 'uv' }}
+        run: uv sync --all-extras --all-packages --group dev
+
+      - name: Install dependencies with pip
+        if: ${{ inputs.package-manager == 'pip' }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # Cleanup netrc
+      - name: Remove .netrc file
+        if: always()
+        run: rm -f ~/.netrc
+
+      # Run linting and type checking
+      - name: Run format and lint
+        run: |
+          if [ "${{ inputs.package-manager }}" = "uv" ]; then
+            uv run ruff format
+            uv run ruff check --fix
+          else
+            pip install ruff
+            ruff format
+            ruff check --fix
+          fi
+
+      - name: Run mypy
+        run: |
+          if [ "${{ inputs.package-manager }}" = "uv" ]; then
+            uv run mypy .
+          else
+            pip install mypy
+            mypy .
+          fi
+
+      # Run tests if not skipped
+      - name: Run tests and coverage
+        if: ${{ inputs.skip-tests != true }}
+        run: |
+          if [ "${{ inputs.package-manager }}" = "uv" ]; then
+            uv run pytest
+            uv run coverage run -m pytest
+            uv run coverage xml -o coverage.xml
+            uv run coverage report -m --fail-under=${{ inputs.test-coverage-threshold }}
+          else
+            pip install pytest coverage
+            pytest
+            coverage run -m pytest
+            coverage xml -o coverage.xml
+            coverage report -m --fail-under=${{ inputs.test-coverage-threshold }}
+          fi
+
+      # Upload coverage report as artifact
+      - name: Upload coverage report
+        if: ${{ inputs.skip-tests != true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-python${{ matrix.python-version }}
+          path: coverage.xml
+          retention-days: 7

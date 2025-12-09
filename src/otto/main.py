@@ -1,51 +1,20 @@
-# import contextlib
-# from mcp.server.fastmcp import FastMCP, Context
-# from fastapi import FastAPI
+import asyncio
+from typing import Any
 
-# mcp = FastMCP(
-#     name="demo",
-#     instructions="A simple demo plugin for FastMCP.",
-# )
+from fastmcp import Client
 
 
-# @contextlib.asynccontextmanager
-# async def lifespan(app: FastAPI):
-#     # Startup code here
-#     async with contextlib.AsyncExitStack() as stack:
-#         await stack.enter_async_context(mcp.session_manager.run())
+async def main() -> None:
+    # The client will automatically handle Google OAuth
+    async with Client("http://localhost:8000/cfo/mcp", auth="oauth") as client:
+        # First-time connection will open Google login in your browser
+        print("✓ Authenticated with Google!")
 
-#         yield
-#     # Shutdown code here
-
-
-# api = FastAPI(
-#     name="demo_api",
-#     lifespan=lifespan,
-# )
+        # Test the protected tool
+        result: Any = await client.call_tool("get_user_info")
+        print(f"Google user: {result['email']}")
+        print(f"Name: {result['name']}")
 
 
-# @mcp.tool(name="TestTool")
-# def test_fool(context: Context) -> str:
-#     return '{"name": "Fool!"}'
-
-
-# api.mount("/demo", mcp.streamable_http_app())
-
-# # if __name__ == "__main__":
-
-# def main():
-#     print("Hello from demo!")
-
-# api =
-
-# @mcp.tool(name="TestTool")
-# def test_fool(context: Context):
-#     return "Fool!"
-
-
-# def main():
-#     print("Hello from demo!")
-
-
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    asyncio.run(main())

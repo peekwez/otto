@@ -10,7 +10,7 @@ from otto.core.settings import get_settings
 @lru_cache
 def connect_engine() -> Engine:
     settings = get_settings()
-    return create_engine(settings.postgres.url)
+    return create_engine(settings.postgres.url.get_secret_value())
 
 
 def load_all_tables() -> dict[str, pd.DataFrame]:
