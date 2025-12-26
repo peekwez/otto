@@ -16,6 +16,7 @@ from otto.core.settings import get_settings
 from otto.tools.analytics.burn import burn_by_function
 from otto.tools.analytics.runway import calculate_runway
 from otto.tools.analytics.variance import variance_report
+from otto.tools.analytics.income_statement import income_statement
 from otto.tools.utils import load_all_tables
 
 _dfs: dict[str, pd.DataFrame] = {}
@@ -170,6 +171,23 @@ def create_server() -> FastMCP:
             dict[str, Any]: Dictionary with variance report information
         """
         result = variance_report(_dfs, fiscal_quarter, budget_version)
+        return result
+
+    @app.tool(
+        name="IncomeStatement",
+        description="Generate income statement report",
+    )
+    def income_statement_tool(ctx: Context) -> dict[str, Any]:  # type: ignore
+        """
+        Generate income statement report using Couqley Data.
+
+        Args:
+            ctx (Context): MCP context
+
+        Returns:
+            dict[str, Any]: Dictionary with income statement report information
+        """
+        result = income_statement(_dfs)
         return result
 
     return app
