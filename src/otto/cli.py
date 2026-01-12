@@ -28,6 +28,26 @@ def app(host: str, port: int, env_file: str | None) -> None:
     run_app(host, port)
 
 
+@cli.command()
+@click.option(
+    "--env-file",
+    "-e",
+    type=click.Path(exists=False),
+    default=None,
+    help="Path to the .env file",
+)
+def events(env_file: str | None) -> None:
+    """Run the Otto events server."""
+
+    from otto.core.settings import get_settings
+
+    get_settings(env_file)
+
+    from otto.rt.pg import pg_listener
+
+    pg_listener()
+
+
 @cli.command("test-client")
 def test_client() -> None:
     """Test the MCP OAuth client flow."""
