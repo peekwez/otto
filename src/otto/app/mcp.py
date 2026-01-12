@@ -13,10 +13,14 @@ from starlette.exceptions import HTTPException
 
 from otto.core.logging import get_logger
 from otto.core.settings import get_settings
+from otto.tools.analytics.accounting_dashboard import accounting_dashboard
 from otto.tools.analytics.burn import burn_by_function
+from otto.tools.analytics.payroll_dashboard import payroll_dashboard
 from otto.tools.analytics.runway import calculate_runway
 from otto.tools.analytics.variance import variance_report
+from otto.tools.analytics.sql_tool import execute_analysis_query, create_readonly_engine
 from otto.tools.utils import load_all_tables
+from otto.tools.analytics.break_even_forecast import break_even_forecast
 
 _dfs: dict[str, pd.DataFrame] = {}
 
@@ -111,7 +115,7 @@ def create_server() -> FastMCP:
     )
     def get_datasets_tool(ctx: Context) -> dict[str, str]:  # type: ignore
         """
-        Get the list of available datasets.
+        Get the list of available datasets for Financial Sample Data or Couqley Data.
 
         Args:
             ctx (Context): MCP context
@@ -124,7 +128,7 @@ def create_server() -> FastMCP:
 
     @app.tool(
         name="BurnByFunction",
-        description="Calculate burn by function",
+        description="Calculate burn by function using Financial Sample Data.",
     )
     def burn_by_function_tool(ctx: Context) -> dict[str, Any]:  # type: ignore
         result = burn_by_function(_dfs)
@@ -132,11 +136,11 @@ def create_server() -> FastMCP:
 
     @app.tool(
         name="Runway",
-        description="Calculate runway based on burn rate and cash balance",
+        description="Calculate runway based on burn rate and cash balance using Financial Sample Data.",
     )
     def runway_tool(delay_capex_days: int, ctx: Context) -> dict[str, Any]:  # type: ignore
         """
-        Calculate runway based on burn rate and cash balance.
+        Calculate runway based on burn rate and cash balance using Financial Sample Data.
 
         Args:
             delay_capex_days (int): Number of days to delay CapEx payments
@@ -151,7 +155,7 @@ def create_server() -> FastMCP:
     @app.tool(
         name="VarianceReport",
         description="Generate actual vs budget variance report by fiscal "
-        "quarter and budget version",
+        "quarter and budget version using Financial Sample Data.",
     )
     def variance_report_tool(  # type: ignore
         fiscal_quarter: str,
@@ -159,7 +163,7 @@ def create_server() -> FastMCP:
         ctx: Context,  # type: ignore
     ) -> dict[str, Any]:
         """
-        Generate actual vs budget variance report by fiscal quarter and budget version.
+        Generate actual vs budget variance report by fiscal quarter and budget version using Financial Sample Data.
 
         Args:
             fiscal_quarter (str): Fiscal quarter (e.g., "Q1", "Q2")
@@ -171,6 +175,41 @@ def create_server() -> FastMCP:
         """
         result = variance_report(_dfs, fiscal_quarter, budget_version)
         return result
+    @app.tool(
+        name="AccountingDashboard",
+        description="Generate accounting activity dashboard using Couqley Data.",
+    )
+    def accounting_activity_dashboard_tool(ctx: Context) -> dict[str, Any]:  # type: ignore
+        result = accounting_dashboard(_dfs)
+        return result
+    @app.tool(
+        name="PayrollDashboard",
+        description="Generate payroll dashboard using Couqley Data.",
+    )
+    def payroll_dashboard_tool(ctx: Context) -> dict[str, Any]:  # type: ignore
+        result = payroll_dashboard(_dfs)
+        return result
+    @app.tool(
+        name="BreakEvenForecast",
+        description="Generate break-even forecast using Couqley Data.",
+    )
+    def break_even_forecast_tool(ctx: Context) -> dict[str, Any]:  # type: ignore
+        result = break_even_forecast(_dfs)
+        return result
+    @app.tool(
+        name="SQLTool",
+        description="Execute a SQL query using Couqley Data.",
+    )
+    def sql_tool(query: str, ctx: Context) -> dict[str, Any]:  # type: ignore
+        # Setup
+        engine = create_readonly_engine("postgresql://user:pass@localhost/mydb")
+
+        # Safe queries work
+        results = execute_analysis_query(
+            query,
+            engine
+        )
+        return results
 
     return app
 
