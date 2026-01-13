@@ -36,10 +36,11 @@ coverage:
 app:
 	otto app --env-file $(ENV_FILE) --host 0.0.0.0 --port 8000
 
-
 listener:
 	otto listener --env-file $(ENV_FILE)
 
+send-mail:
+	otto send-mail --env-file $(ENV_FILE)
 
 install:
 	uv pip install -e .

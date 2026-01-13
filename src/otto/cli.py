@@ -43,9 +43,29 @@ def listener(env_file: str | None) -> None:
 
     get_settings(env_file)
 
-    from otto.rt.pg import pg_listener
+    from otto.clients.listener import pg_listener
 
     pg_listener()
+
+
+@cli.command()
+@click.option(
+    "--env-file",
+    "-e",
+    type=click.Path(exists=False),
+    default=None,
+    help="Path to the .env file",
+)
+def send_mail(env_file: str | None) -> None:
+    """Run the Otto postgres listener app."""
+
+    from otto.core.settings import get_settings
+
+    get_settings(env_file)
+
+    from otto.clients.mail import send_mail
+
+    send_mail()
 
 
 @cli.command("test-client")

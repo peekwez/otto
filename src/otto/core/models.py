@@ -33,9 +33,9 @@ class PostgresSettings(BaseSettings):
             cursor = conn.cursor()
             cursor.execute(sql.SQL("SELECT * FROM information_schema.tables"))
             rows = cursor.fetchall()
-            logger.info(f"Connected to Postgres. Found {len(rows)}")
+            logger.info(f"Connected to Postgres. Found {len(rows)} tables...")
             conn.close()
-            logger.info("Postgres connection successful.")
+            logger.info("Postgres connection successful...")
         except Exception as e:
             logger.error(f"Postgres connection failed: {e}")
             raise PostgresConnectionError(f"Failed to connect to Postgres: {e}") from e
@@ -97,6 +97,16 @@ class RedisSettings(BaseSettings):
     port: int = 6379
 
 
+class SendGridSettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="SENDGRID__",
+        case_sensitive=False,
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+    api_key: SecretStr
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="",
@@ -112,4 +122,5 @@ class Settings(BaseSettings):
     postgres: PostgresSettings
     ngrok: NgrokSettings
     keys: KeysSettings
+    sendgrid: SendGridSettings
     redis: RedisSettings = RedisSettings()

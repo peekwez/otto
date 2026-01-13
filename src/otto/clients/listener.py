@@ -3,6 +3,7 @@ import sys
 
 from pgnotify import await_pg_notifications, get_dbapi_connection
 
+from otto.clients.mail import send_mail
 from otto.core.logging import get_logger
 from otto.core.settings import get_settings
 
@@ -25,4 +26,17 @@ def pg_listener() -> None:
             f"Received Postgres notification from channel: "
             f"{channel}, columns: {num_columns}, size: {data_size} bytes"
         )
-        logger.info(f"Payload data: {payload}")
+        # logger.info(f"Payload data: {payload}")
+
+        # TODO: Process the notification payload as needed
+        # do something with an agent. analyze breakeven or forecast
+        # TODO: Send notification to other services or trigger workflows
+        if channel == "payroll-data-channel" and payload["monthly"] >= 10000.00:
+            data = json.dumps(payload, indent=2)
+            send_mail(
+                subject=f"High Payroll Alert: ${payload['monthly']}",
+                content=(
+                    f"<p>Received high payroll notification with payload"
+                    f":</p><pre>{data}</pre>"
+                ),
+            )
