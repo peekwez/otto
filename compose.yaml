@@ -1,0 +1,28 @@
+services:
+  otto:
+    image: registry.digitalocean.com/konnect-docker/otto-mcp/web:latest
+    container_name: otto-mcp
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.docker
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:latest
+    container_name: otto-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  redis_data:
+    driver: local

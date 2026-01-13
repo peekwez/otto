@@ -103,6 +103,8 @@ def patch_server_logging(logger: loguru.Logger) -> None:
         "uvicorn.access",
         "uvicorn.error",
         "fastapi",
+        "fastmcp",
+        "mcp",
         "asyncio",
         "starlette",
         "celery",

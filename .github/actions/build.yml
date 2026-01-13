@@ -1,0 +1,174 @@
+name: Reusable Docker Build and Push
+
+on:
+  workflow_call:
+    inputs:
+      registry:
+        description: "Container registry to push to"
+        type: string
+        default: "ghcr.io"
+        required: false
+      image-name:
+        description: "Name of the Docker image"
+        type: string
+        required: true
+      python-versions:
+        description: "List of Python versions to build Docker images for"
+        type: string
+        default: '["3.12", "3.13"]'
+        required: false
+      default-python-version:
+        description: "Default Python version to tag as latest"
+        type: string
+        default: "3.12"
+        required: false
+      platforms:
+        description: "Platforms to build for"
+        type: string
+        default: "linux/amd64,linux/arm64"
+        required: false
+      dockerfile-path:
+        description: "Path to Dockerfile"
+        type: string
+        default: "Dockerfile"
+        required: false
+      build-args:
+        description: "Additional build arguments as JSON"
+        type: string
+        default: "{}"
+        required: false
+      image-description:
+        description: "Description for the Docker image"
+        type: string
+        default: "OPG Service"
+        required: false
+    secrets:
+      REGISTRY_USERNAME:
+        required: true
+        description: "Username for container registry"
+      REGISTRY_PASSWORD:
+        required: true
+        description: "Password for container registry"
+      GH_ACTOR:
+        required: false
+        description: "GitHub actor for private repos"
+      GH_PAT_TOKEN:
+        required: false
+        description: "GitHub PAT token for private repos"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON(inputs.python-versions) }}
+        include:
+          - is_default: false
+    steps:
+      - name: Set default Python version flag
+        run: |
+          if [[ "${{ matrix.python-version }}" == "${{ inputs.default-python-version }}" ]]; then
+            echo "IS_DEFAULT=true" >> $GITHUB_ENV
+          else
+            echo "IS_DEFAULT=false" >> $GITHUB_ENV
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Docker registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.registry }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Normalize owner name
+        run: echo "OWNER_LC=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Prepare .netrc file for build
+        run: |
+          NETRC_PATH=$RUNNER_TEMP/netrc
+          echo "machine github.com " > $NETRC_PATH
+          echo "login ${{ secrets.GH_ACTOR }}" >> $NETRC_PATH
+          echo "password ${{ secrets.GH_PAT_TOKEN }}" >> $NETRC_PATH
+          chmod 600 $NETRC_PATH
+          echo "NETRC_PATH=$NETRC_PATH" >> $GITHUB_ENV
+
+      - name: Compute tags
+        id: tags
+        run: |
+          PY_NODOT=$(echo "${{ matrix.python-version }}" | tr -d '.')
+          REPO=${{ inputs.registry }}/${{ env.OWNER_LC }}/${{ inputs.image-name }}
+          echo "repo=$REPO" >> "$GITHUB_OUTPUT"
+          echo "py_tag=py$PY_NODOT" >> "$GITHUB_OUTPUT"
+
+      # Processing of build args will be handled directly in the build step
+
+      # Extract additional build args from inputs
+      - name: Extract additional build args
+        id: extract_args
+        run: |
+          if [[ '${{ inputs.build-args }}' != '{}' && '${{ inputs.build-args }}' != '' ]]; then
+            echo "has_args=true" >> $GITHUB_OUTPUT
+            # Format each key-value pair as a proper build-arg
+            args_formatted=$(echo '${{ inputs.build-args }}' | jq -r 'to_entries[] | "\(.key)=\(.value)"')
+            echo "additional_args<<EOF" >> $GITHUB_OUTPUT
+            echo "$args_formatted" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "has_args=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ inputs.dockerfile-path }}
+          push: true
+          platforms: ${{ inputs.platforms }}
+          build-args: |
+            PYTHON_VERSION=${{ matrix.python-version }}
+            ${{ steps.extract_args.outputs.has_args == 'true' && steps.extract_args.outputs.additional_args || '' }}
+          secret-files: |
+            netrc=${{ env.NETRC_PATH }}
+          tags: |
+            ${{ steps.tags.outputs.repo }}:${{ steps.tags.outputs.py_tag }}
+            ${{ steps.tags.outputs.repo }}:${{ steps.tags.outputs.py_tag }}-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description="${{ inputs.image-description }}"
+            org.opencontainers.image.organization=${{ github.repository_owner }}
+          cache-from: type=gha,scope=${{ matrix.python-version }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.python-version }}
+
+      - name: Tag default version
+        if: env.IS_DEFAULT == 'true'
+        run: |
+          docker buildx imagetools create \
+            -t ${{ steps.tags.outputs.repo }}:latest \
+            -t ${{ steps.tags.outputs.repo }}:${{ github.sha }} \
+            ${{ steps.tags.outputs.repo }}:${{ steps.tags.outputs.py_tag }}
+
+      - name: Cleanup .netrc
+        run: rm -f ${{ env.NETRC_PATH }}
+
+      - name: Output image details
+        run: |
+          echo "::notice::Built and pushed image: ${{ steps.tags.outputs.repo }}:${{ steps.tags.outputs.py_tag }}"
+          echo "::notice::Built and pushed image: ${{ steps.tags.outputs.repo }}:${{ steps.tags.outputs.py_tag }}-${{ github.sha }}"
+          if [[ "${{ env.IS_DEFAULT }}" == "true" ]]; then
+            echo "::notice::Built and pushed default image: ${{ steps.tags.outputs.repo }}:latest"
+            echo "::notice::Built and pushed default image: ${{ steps.tags.outputs.repo }}:${{ github.sha }}"
+          fi

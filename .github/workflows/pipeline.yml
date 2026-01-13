@@ -1,0 +1,42 @@
+name: Otto CI/CD Pipeline
+
+on:
+  pull_request:
+    branches:
+      - main
+      - staging
+      - develop
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  ci-checks:
+    uses: ./.github/actions/checks.yml
+    with:
+      python-versions: '["3.12", "3.13"]'
+      skip-tests: true
+      test-coverage-threshold: "95"
+      package-manager: "uv"
+    secrets:
+      GH_ACTOR: ${{ secrets.GH_ACTOR }}
+      GH_PAT_TOKEN: ${{ secrets.GH_PAT_TOKEN }}
+
+  build-and-push:
+    needs: ci-checks
+    uses: ./.github/actions/build.yml
+    with:
+      registry: "ghcr.io"
+      image-name: "otto-ai/otto"
+      python-versions: '["3.12", "3.13"]'
+      default-python-version: "3.12"
+      platforms: "linux/amd64,linux/arm64"
+      dockerfile-path: "Dockerfile"
+      build-args: "{}"
+      image-description: "Otto AI Service"
+    secrets:
+      REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+      REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+      GH_ACTOR: ${{ secrets.GH_ACTOR }}
+      GH_PAT_TOKEN: ${{ secrets.GH_PAT_TOKEN }}
