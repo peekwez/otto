@@ -1,3 +1,6 @@
+import json
+import sys
+
 from pgnotify import await_pg_notifications, get_dbapi_connection
 
 from otto.core.logging import get_logger
@@ -14,5 +17,12 @@ def pg_listener() -> None:
     logger.info("Starting Postgres listener...")
     logger.info(f"Listening for Postgres notifications on {CHANNELS}...")
     for notification in await_pg_notifications(_conn, CHANNELS):
-        logger.info(notification.channel)
-        logger.info(notification.payload)
+        channel = notification.channel
+        payload = json.loads(notification.payload)
+        num_columns = len(payload.keys())
+        data_size = sys.getsizeof(notification.payload)
+        logger.info(
+            f"Received Postgres notification from channel: "
+            f"{channel}, columns: {num_columns}, size: {data_size} bytes"
+        )
+        logger.info(f"Payload data: {payload}")

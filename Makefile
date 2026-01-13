@@ -37,8 +37,8 @@ app:
 	otto app --env-file $(ENV_FILE) --host 0.0.0.0 --port 8000
 
 
-events:
-	otto events --env-file $(ENV_FILE)
+listener:
+	otto listener --env-file $(ENV_FILE)
 
 
 install:

@@ -36,8 +36,8 @@ def app(host: str, port: int, env_file: str | None) -> None:
     default=None,
     help="Path to the .env file",
 )
-def events(env_file: str | None) -> None:
-    """Run the Otto events server."""
+def listener(env_file: str | None) -> None:
+    """Run the Otto postgres listener app."""
 
     from otto.core.settings import get_settings
 
